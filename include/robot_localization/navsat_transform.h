@@ -165,6 +165,8 @@ class NavSatTransform
     //!
     bool broadcast_cartesian_transform_as_parent_frame_;
 
+    bool broadcast_cartesian_initial_transform_;
+
     //! @brief Whether or not we have new GPS data
     //!
     //! We only want to compute and broadcast our transformed GPS data if it's new. This variable keeps track of that.
@@ -262,6 +264,9 @@ class NavSatTransform
     //!
     std::string gps_frame_id_;
 
+
+    bool has_utm_zero_;
+    geometry_msgs::Vector3 utm_zero_;
     //! @brief the UTM zone (zero means UPS)
     //!
     int utm_zone_;
@@ -275,6 +280,9 @@ class NavSatTransform
     //! This will just match whatever your odometry message has
     //!
     std::string world_frame_id_;
+    std::string force_base_link_frame_id_;
+    std::string force_gps_frame_id_;
+    std::string force_odom_frame_id_;
 
     //! @brief Covariance for most recent odometry data
     //!

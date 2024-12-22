@@ -46,6 +46,7 @@ namespace RobotLocalization
   NavSatTransform::NavSatTransform(ros::NodeHandle nh, ros::NodeHandle nh_priv) :
     broadcast_cartesian_transform_(false),
     broadcast_cartesian_transform_as_parent_frame_(false),
+    broadcast_cartesian_initial_transform_(false),
     gps_updated_(false),
     has_transform_gps_(false),
     has_transform_imu_(false),
@@ -64,6 +65,9 @@ namespace RobotLocalization
     gps_frame_id_(""),
     utm_zone_(0),
     world_frame_id_("odom"),
+    force_base_link_frame_id_(),
+    force_gps_frame_id_(),
+    force_odom_frame_id_(),
     transform_timeout_(ros::Duration(0)),
     tf_listener_(tf_buffer_)
   {
@@ -76,6 +80,7 @@ namespace RobotLocalization
 
     double frequency;
     double delay = 0.0;
+    has_utm_zero_ = false;
     double transform_timeout = 0.0;
 
     // Load the parameters we need
@@ -84,6 +89,7 @@ namespace RobotLocalization
     nh_priv.param("broadcast_cartesian_transform", broadcast_cartesian_transform_, false);
     nh_priv.param("broadcast_cartesian_transform_as_parent_frame",
                   broadcast_cartesian_transform_as_parent_frame_, false);
+    nh_priv.param("broadcast_cartesian_initial_transform", broadcast_cartesian_initial_transform_, false);
     nh_priv.param("zero_altitude", zero_altitude_, false);
     nh_priv.param("publish_filtered_gps", publish_gps_, false);
     nh_priv.param("use_odometry_yaw", use_odometry_yaw_, false);
@@ -93,6 +99,9 @@ namespace RobotLocalization
     nh_priv.param("delay", delay, 0.0);
     nh_priv.param("transform_timeout", transform_timeout, 0.0);
     nh_priv.param("cartesian_frame_id", cartesian_frame_id_, std::string(use_local_cartesian_ ? "local_enu" : "utm"));
+    nh_priv.param("force_odom_frame_id", force_odom_frame_id_, std::string());
+    nh_priv.param("force_base_link_frame_id", force_base_link_frame_id_, std::string());
+    nh_priv.param("force_gps_frame_id", force_gps_frame_id_, std::string());
     transform_timeout_.fromSec(transform_timeout);
 
     // Check for deprecated parameters
@@ -617,7 +626,11 @@ namespace RobotLocalization
 
   void NavSatTransform::gpsFixCallback(const sensor_msgs::NavSatFixConstPtr& msg)
   {
-    gps_frame_id_ = msg->header.frame_id;
+    if (force_gps_frame_id_.empty()) {
+        gps_frame_id_ = msg->header.frame_id;
+    } else {
+        gps_frame_id_ = force_gps_frame_id_;
+    }
 
     if (gps_frame_id_.empty())
     {
@@ -739,8 +752,16 @@ namespace RobotLocalization
 
   void NavSatTransform::odomCallback(const nav_msgs::OdometryConstPtr& msg)
   {
-    world_frame_id_ = msg->header.frame_id;
-    base_link_frame_id_ = msg->child_frame_id;
+    if (force_odom_frame_id_.empty()) {
+        world_frame_id_ = msg->header.frame_id;
+    } else {
+        world_frame_id_ = force_odom_frame_id_;
+    }
+    if (force_base_link_frame_id_.empty()) {
+        base_link_frame_id_ = msg->child_frame_id;
+    } else {
+        base_link_frame_id_ = force_base_link_frame_id_;
+    }
 
     if (!transform_good_ && !use_manual_datum_)
     {
