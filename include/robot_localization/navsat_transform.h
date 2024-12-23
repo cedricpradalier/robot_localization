@@ -41,6 +41,7 @@
 #include <ros/ros.h>
 
 #include <nav_msgs/Odometry.h>
+#include <std_srvs/Trigger.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/NavSatFix.h>
 
@@ -88,6 +89,10 @@ class NavSatTransform
     //! @brief Callback for the to Lat Long service
     //!
     bool toLLCallback(robot_localization::ToLL::Request& request, robot_localization::ToLL::Response& response);
+
+    //! @brief Callback to reset utm/origin
+    //!
+    bool resetOriginCallback(std_srvs::Trigger::Request& request, std_srvs::Trigger::Response& response);
 
     //! @brief Callback for the from Lat Long service
     //!
@@ -283,6 +288,7 @@ class NavSatTransform
     std::string force_base_link_frame_id_;
     std::string force_gps_frame_id_;
     std::string force_odom_frame_id_;
+    std::string force_imu_frame_id_;
 
     //! @brief Covariance for most recent odometry data
     //!
@@ -339,6 +345,11 @@ class NavSatTransform
     //! @brief Holds the odom->UTM transform for filtered GPS broadcast
     //!
     tf2::Transform cartesian_world_trans_inverse_;
+    //
+    //! @brief Holds the UTM->base_link transform for filtered GPS broadcast
+    //!
+    tf2::Transform cartesian_initial_trans_;
+
 
     //! @brief Publiser for filtered gps data
     //!
@@ -367,6 +378,10 @@ class NavSatTransform
     //! @brief Service for to Lat Long
     //!
     ros::ServiceServer to_ll_srv_;
+
+    //! @brief Service to reset utm/origin
+    //!
+    ros::ServiceServer reset_orig_srv_;
 
     //! @brief Service for from Lat Long
     //!

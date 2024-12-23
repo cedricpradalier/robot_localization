@@ -68,6 +68,7 @@ namespace RobotLocalization
     force_base_link_frame_id_(),
     force_gps_frame_id_(),
     force_odom_frame_id_(),
+    force_imu_frame_id_(),
     transform_timeout_(ros::Duration(0)),
     tf_listener_(tf_buffer_)
   {
@@ -100,6 +101,7 @@ namespace RobotLocalization
     nh_priv.param("transform_timeout", transform_timeout, 0.0);
     nh_priv.param("cartesian_frame_id", cartesian_frame_id_, std::string(use_local_cartesian_ ? "local_enu" : "utm"));
     nh_priv.param("force_odom_frame_id", force_odom_frame_id_, std::string());
+    nh_priv.param("force_imu_frame_id", force_imu_frame_id_, std::string());
     nh_priv.param("force_base_link_frame_id", force_base_link_frame_id_, std::string());
     nh_priv.param("force_gps_frame_id", force_gps_frame_id_, std::string());
     transform_timeout_.fromSec(transform_timeout);
@@ -122,6 +124,7 @@ namespace RobotLocalization
     // Subscribe to the messages and services we need
     datum_srv_ = nh.advertiseService("datum", &NavSatTransform::datumCallback, this);
 
+    reset_orig_srv_ = nh.advertiseService("resetOrigin", &NavSatTransform::resetOriginCallback, this);
     to_ll_srv_ = nh.advertiseService("toLL", &NavSatTransform::toLLCallback, this);
     from_ll_srv_ = nh.advertiseService("fromLL", &NavSatTransform::fromLLCallback, this);
     set_utm_zone_srv_ = nh.advertiseService("setUTMZone", &NavSatTransform::setUTMZoneCallback, this);
@@ -239,6 +242,27 @@ namespace RobotLocalization
           filtered_gps_pub_.publish(odom_gps);
         }
       }
+    }
+    if (broadcast_cartesian_initial_transform_ && !has_utm_zero_) {
+        has_utm_zero_ = RosFilterUtilities::lookupTransformSafe(tf_buffer_,
+                cartesian_frame_id_ , 
+                base_link_frame_id_,
+                ros::Time(0), 
+                ros::Duration(1.0),
+                cartesian_initial_trans_,
+                tf_silent_failure_);
+        if (has_utm_zero_) {
+            ROS_INFO("Initialized cartesian origin");
+            geometry_msgs::TransformStamped cartesian_transform_stamped;
+            cartesian_transform_stamped.header.stamp = ros::Time::now();
+            cartesian_transform_stamped.header.frame_id = cartesian_frame_id_;
+            cartesian_transform_stamped.child_frame_id = cartesian_frame_id_+"/origin";
+            cartesian_transform_stamped.transform = 
+                tf2::toMsg(cartesian_initial_trans_);
+            cartesian_broadcaster_.sendTransform(cartesian_transform_stamped);
+        } else {
+            ROS_WARN("Could not initialize cartesian origin, will retry");
+        }
     }
   }
 
@@ -405,6 +429,15 @@ namespace RobotLocalization
     mapToLL(point, response.ll_point.latitude, response.ll_point.longitude, response.ll_point.altitude);
 
     return true;
+  }
+
+  bool NavSatTransform::resetOriginCallback(std_srvs::Trigger::Request& request,
+                                     std_srvs::Trigger::Response& response)
+  {
+      has_utm_zero_ = false;
+      response.success = true;
+
+      return true;
   }
 
   bool NavSatTransform::fromLLCallback(robot_localization::FromLL::Request& request,
@@ -710,7 +743,7 @@ namespace RobotLocalization
       tf2::Transform target_frame_trans;
       bool can_transform = RosFilterUtilities::lookupTransformSafe(tf_buffer_,
                                                                    base_link_frame_id_,
-                                                                   msg->header.frame_id,
+                                                                   (force_imu_frame_id_.empty())?msg->header.frame_id:force_imu_frame_id_,
                                                                    msg->header.stamp,
                                                                    transform_timeout_,
                                                                    target_frame_trans,
